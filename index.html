@@ -1,0 +1,841 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SUPER JOSEY BUILDER</title>
+    <style>
+        body {
+            margin: 0;
+            background-color: #222;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            font-family: 'Courier New', Courier, monospace;
+            overflow: hidden;
+        }
+        #game-container {
+            position: relative;
+            box-shadow: 0 0 20px rgba(0,0,0,0.5);
+        }
+        canvas {
+            display: block;
+            image-rendering: pixelated; /* Critical for retro look */
+            background-color: #87CEEB; /* Sky Blue Layer 0 */
+        }
+        #ui-overlay {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            color: white;
+            text-shadow: 2px 2px 0 #000;
+            font-weight: bold;
+            pointer-events: none;
+        }
+        #start-screen {
+            position: absolute;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.8);
+            color: white;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            cursor: pointer;
+            z-index: 100;
+        }
+    </style>
+</head>
+<body>
+
+<div id="game-container">
+    <canvas id="gameCanvas" width="640" height="360"></canvas>
+    <div id="ui-overlay">
+        <div>SCORE: <span id="score">0</span></div>
+        <div>WOOD: <span id="wood">0</span>/99</div>
+    </div>
+    <div id="start-screen" onclick="startGame()">
+        <h1>SUPER JOSEY BUILDER</h1>
+        <p>CLICK TO START</p>
+        <p>Controls:</p>
+        <ul style="text-align: left;">
+            <li>Arrows: Move</li>
+            <li>Z: Jump</li>
+            <li>X: Hammer Attack</li>
+            <li>Hold C: Build Menu (Slow Time)</li>
+        </ul>
+    </div>
+</div>
+
+<script>
+/* ---------------------------------------------------
+   GAME ENGINE & CONSTANTS
+   ---------------------------------------------------
+*/
+const canvas = document.getElementById('gameCanvas');
+const ctx = canvas.getContext('2d');
+const scoreEl = document.getElementById('score');
+const woodEl = document.getElementById('wood');
+const startScreen = document.getElementById('start-screen');
+
+// Game State
+let gameActive = false;
+let lastTime = 0;
+let timeScale = 1.0;
+let globalScore = 0;
+let woodInventory = 0;
+let currentLevel = 1;
+
+// Inputs
+const keys = {
+    ArrowLeft: false,
+    ArrowRight: false,
+    ArrowUp: false,
+    ArrowDown: false,
+    z: false, // Jump
+    x: false, // Attack
+    c: false  // Build
+};
+
+// Audio Context (Synthesizer)
+let audioCtx;
+
+function initAudio() {
+    if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+}
+
+function playSound(type) {
+    if (!audioCtx) return;
+    const osc = audioCtx.createOscillator();
+    const gain = audioCtx.createGain();
+    osc.connect(gain);
+    gain.connect(audioCtx.destination);
+
+    const now = audioCtx.currentTime;
+
+    if (type === 'jump') {
+        osc.type = 'square';
+        osc.frequency.setValueAtTime(150, now);
+        osc.frequency.linearRampToValueAtTime(300, now + 0.1);
+        gain.gain.setValueAtTime(0.1, now);
+        gain.gain.linearRampToValueAtTime(0, now + 0.1);
+        osc.start(now);
+        osc.stop(now + 0.1);
+    } else if (type === 'hammer') {
+        osc.type = 'triangle'; // Whoosh
+        osc.frequency.setValueAtTime(300, now);
+        osc.frequency.exponentialRampToValueAtTime(50, now + 0.2);
+        gain.gain.setValueAtTime(0.1, now);
+        gain.gain.linearRampToValueAtTime(0, now + 0.2);
+        osc.start(now);
+        osc.stop(now + 0.2);
+    } else if (type === 'bonk') {
+        osc.type = 'sawtooth';
+        osc.frequency.setValueAtTime(100, now);
+        osc.frequency.linearRampToValueAtTime(800, now + 0.1);
+        gain.gain.setValueAtTime(0.2, now);
+        gain.gain.linearRampToValueAtTime(0, now + 0.1);
+        osc.start(now);
+        osc.stop(now + 0.1);
+    } else if (type === 'crunch') { // Wood
+        osc.type = 'square';
+        osc.frequency.setValueAtTime(100, now);
+        gain.gain.setValueAtTime(0.1, now);
+        gain.gain.exponentialRampToValueAtTime(0.01, now + 0.1);
+        osc.start(now);
+        osc.stop(now + 0.1);
+    } else if (type === 'gunshot') {
+        // Noise buffer for gunshot
+        const bufferSize = audioCtx.sampleRate * 0.5;
+        const buffer = audioCtx.createBuffer(1, bufferSize, audioCtx.sampleRate);
+        const data = buffer.getChannelData(0);
+        for (let i = 0; i < bufferSize; i++) {
+            data[i] = Math.random() * 2 - 1;
+        }
+        const noise = audioCtx.createBufferSource();
+        noise.buffer = buffer;
+        noise.connect(gain);
+        gain.gain.setValueAtTime(0.3, now);
+        gain.gain.exponentialRampToValueAtTime(0.01, now + 0.3);
+        noise.start(now);
+    } else if (type === 'build') {
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(440, now);
+        osc.frequency.setValueAtTime(880, now + 0.1);
+        gain.gain.setValueAtTime(0.1, now);
+        gain.gain.linearRampToValueAtTime(0, now + 0.2);
+        osc.start(now);
+        osc.stop(now + 0.2);
+    } else if (type === 'error') {
+        osc.type = 'sawtooth';
+        osc.frequency.setValueAtTime(100, now);
+        osc.frequency.setValueAtTime(80, now + 0.1);
+        gain.gain.setValueAtTime(0.2, now);
+        gain.gain.linearRampToValueAtTime(0, now + 0.2);
+        osc.start(now);
+        osc.stop(now + 0.2);
+    }
+}
+
+/* ---------------------------------------------------
+   ENTITIES & CLASSES
+   ---------------------------------------------------
+*/
+
+class Entity {
+    constructor(x, y, w, h, color) {
+        this.x = x;
+        this.y = y;
+        this.w = w;
+        this.h = h;
+        this.color = color;
+        this.vx = 0;
+        this.vy = 0;
+        this.grounded = false;
+        this.markedForDeletion = false;
+    }
+    
+    draw(ctx, camX, camY) {
+        ctx.fillStyle = this.color;
+        ctx.fillRect(this.x - camX, this.y - camY, this.w, this.h);
+    }
+    
+    update(dt, blocks) {}
+}
+
+class Block extends Entity {
+    constructor(x, y, w, h, type) {
+        super(x, y, w, h, '#654321'); // Dirt color default
+        this.type = type; // 'solid', 'jumpthru', 'spike'
+        
+        if (type === 'solid') this.color = '#5c4033'; // Dark Brown
+        if (type === 'jumpthru') this.color = '#8b4513'; // Saddle Brown
+        if (type === 'spike') this.color = '#888'; // Grey
+    }
+
+    draw(ctx, camX, camY) {
+        super.draw(ctx, camX, camY);
+        if (this.type === 'solid') {
+            // Grass top
+            ctx.fillStyle = '#228b22';
+            ctx.fillRect(this.x - camX, this.y - camY, this.w, 4);
+        }
+        if (this.type === 'spike') {
+            ctx.fillStyle = '#aaa';
+            // Draw triangles
+            ctx.beginPath();
+            ctx.moveTo(this.x - camX, this.y + this.h - camY);
+            ctx.lineTo(this.x + this.w/2 - camX, this.y - camY);
+            ctx.lineTo(this.x + this.w - camX, this.y + this.h - camY);
+            ctx.fill();
+        }
+    }
+}
+
+class WoodPile extends Entity {
+    constructor(x, y) {
+        super(x, y, 32, 16, '#deb887');
+    }
+    draw(ctx, camX, camY) {
+        ctx.fillStyle = this.color;
+        // Draw log shapes
+        ctx.beginPath();
+        ctx.arc(this.x + 8 - camX, this.y + 8 - camY, 6, 0, Math.PI*2);
+        ctx.arc(this.x + 16 - camX, this.y + 4 - camY, 6, 0, Math.PI*2);
+        ctx.arc(this.x + 24 - camX, this.y + 8 - camY, 6, 0, Math.PI*2);
+        ctx.fill();
+    }
+}
+
+class Particle extends Entity {
+    constructor(x, y, vx, vy, life, color) {
+        super(x, y, 4, 4, color);
+        this.vx = vx;
+        this.vy = vy;
+        this.life = life;
+    }
+    update(dt) {
+        this.x += this.vx * dt;
+        this.y += this.vy * dt;
+        this.life -= dt;
+        if (this.life <= 0) this.markedForDeletion = true;
+    }
+}
+
+class Player extends Entity {
+    constructor(x, y) {
+        super(x, y, 24, 48, '#000'); // Hitbox
+        this.speed = 200;
+        this.jumpForce = -450;
+        this.gravity = 1200;
+        this.facing = 1; // 1 right, -1 left
+        this.idleTimer = 0;
+        this.huntingSequence = false;
+        this.attackTimer = 0;
+        this.buck = null; // Reference to buck object
+    }
+
+    update(dt, blocks) {
+        // Horizontal Movement
+        if (!this.huntingSequence) {
+            if (keys.ArrowRight) { this.vx = this.speed; this.facing = 1; }
+            else if (keys.ArrowLeft) { this.vx = -this.speed; this.facing = -1; }
+            else { this.vx = 0; }
+
+            // Jump
+            if (keys.z && this.grounded) {
+                this.vy = this.jumpForce;
+                this.grounded = false;
+                playSound('jump');
+                keys.z = false; // Prevent bunny hop hold
+            }
+
+            // Attack
+            if (keys.x && this.attackTimer <= 0) {
+                this.attackTimer = 0.2; // Duration of swing
+                playSound('hammer');
+                // Create hitbox logic in game loop
+            }
+            if (this.attackTimer > 0) this.attackTimer -= dt;
+        }
+
+        // Physics
+        this.vy += this.gravity * dt;
+        this.x += this.vx * dt;
+        this.handleCollisions(blocks, 'x');
+        this.y += this.vy * dt;
+        this.handleCollisions(blocks, 'y');
+
+        // Boundaries
+        if (this.y > 1000) {
+            // Fell off world
+            this.respawn();
+        }
+
+        // Hunting Idle Logic
+        if (Math.abs(this.vx) < 1 && this.grounded && !this.huntingSequence) {
+            this.idleTimer += dt;
+            if (this.idleTimer > 5) {
+                this.startHuntingSequence();
+            }
+        } else {
+            this.idleTimer = 0;
+        }
+    }
+
+    startHuntingSequence() {
+        this.huntingSequence = true;
+        // Spawn Buck
+        this.buck = {
+            x: this.x + (this.facing * 200),
+            y: this.y,
+            w: 32, h: 32,
+            state: 'alive',
+            life: 2.0 // Time until shoot
+        };
+    }
+
+    handleHuntingLogic(dt) {
+        if (!this.huntingSequence || !this.buck) return;
+        
+        this.buck.life -= dt;
+
+        if (this.buck.life <= 0 && this.buck.state === 'alive') {
+            playSound('gunshot');
+            this.buck.state = 'dead';
+            // Wait 1 second then cleanup
+            setTimeout(() => {
+                this.huntingSequence = false;
+                this.buck = null;
+                this.idleTimer = 0;
+            }, 1000);
+        }
+    }
+
+    handleCollisions(blocks, axis) {
+        this.grounded = false;
+        for (let block of blocks) {
+            if (checkOverlap(this, block)) {
+                // Spike Check
+                if (block.type === 'spike') {
+                    this.respawn();
+                    return;
+                }
+                
+                // Level End Check
+                if (block instanceof LevelSign) {
+                    block.trigger();
+                    return;
+                }
+
+                if (axis === 'x') {
+                    if (this.vx > 0) this.x = block.x - this.w;
+                    if (this.vx < 0) this.x = block.x + block.w;
+                    this.vx = 0;
+                } else {
+                    if (this.vy > 0) { // Falling
+                        if (block.type === 'jumpthru' && this.y + this.h - (this.vy * 0.05) > block.y) {
+                            // If we were already below the top, don't snap
+                            continue;
+                        }
+                        this.y = block.y - this.h;
+                        this.grounded = true;
+                        this.vy = 0;
+                    } else if (this.vy < 0 && block.type === 'solid') { // Hitting head
+                        this.y = block.y + block.h;
+                        this.vy = 0;
+                    }
+                }
+            }
+        }
+    }
+
+    respawn() {
+        this.x = 50;
+        this.y = 200;
+        this.vx = 0;
+        this.vy = 0;
+        scoreEl.innerText = globalScore; // No penalty implemented
+    }
+
+    draw(ctx, camX, camY) {
+        // Draw Josey
+        const cx = this.x - camX;
+        const cy = this.y - camY;
+
+        if (this.huntingSequence) {
+            // Draw Rifle
+            ctx.fillStyle = 'brown';
+            ctx.fillRect(cx + (this.facing*10), cy + 20, 20, 4);
+        }
+
+        // Hat (Red)
+        ctx.fillStyle = '#ff0000';
+        ctx.fillRect(cx, cy, 24, 8);
+        ctx.fillRect(cx + (this.facing === 1 ? 16 : -4), cy + 4, 12, 4); // Bill
+
+        // Face
+        ctx.fillStyle = '#ffccaa';
+        ctx.fillRect(cx + 4, cy + 8, 16, 10);
+
+        // Shirt (White)
+        ctx.fillStyle = '#fff';
+        ctx.fillRect(cx + 2, cy + 18, 20, 16);
+
+        // Shorts (Blue)
+        ctx.fillStyle = '#55aaff';
+        ctx.fillRect(cx + 2, cy + 34, 20, 8);
+
+        // Boots (Brown)
+        ctx.fillStyle = '#654321';
+        ctx.fillRect(cx + 2, cy + 42, 8, 6);
+        ctx.fillRect(cx + 14, cy + 42, 8, 6);
+
+        // Hammer Animation
+        if (this.attackTimer > 0) {
+            ctx.fillStyle = '#888'; // Head
+            const hx = this.facing === 1 ? cx + 24 : cx - 16;
+            const hy = cy + 20;
+            ctx.fillRect(hx, hy, 16, 10);
+            ctx.fillStyle = '#654321'; // Handle
+            ctx.fillRect(hx + 6, hy + 10, 4, 10);
+        }
+
+        // Draw Buck (Background layer logic usually, but simplified here)
+        if (this.huntingSequence && this.buck) {
+            const bx = this.buck.x - camX;
+            const by = this.buck.y - camY + 16; // Adjust to ground
+            
+            ctx.fillStyle = '#d2b48c';
+            if (this.buck.state === 'alive') {
+                ctx.fillRect(bx, by, 30, 20); // Body
+                ctx.fillRect(bx, by-10, 10, 10); // Head
+                ctx.fillStyle = '#fff'; // Antlers
+                ctx.fillRect(bx, by-16, 2, 6);
+                ctx.fillRect(bx+4, by-16, 2, 6);
+            } else {
+                // Dead buck (tipped over)
+                ctx.fillRect(bx, by+10, 30, 10); 
+            }
+        }
+    }
+}
+
+class Brother extends Entity {
+    constructor(x, y, type) {
+        super(x, y, 24, 48, '#f0f');
+        this.type = type; // 'alan', 'pat', 'josh'
+        this.startX = x;
+        this.patrolDist = 100;
+        this.timer = 0;
+        this.isBonked = false;
+    }
+
+    bonk() {
+        if (this.isBonked) return;
+        this.isBonked = true;
+        this.vx = 400; // Fly right
+        this.vy = -400; // Fly up
+        playSound('bonk');
+        
+        // Spawn angry vein particle
+        particles.push(new Particle(this.x, this.y - 10, 0, -10, 1, 'red'));
+    }
+
+    update(dt, blocks) {
+        if (this.isBonked) {
+            this.x += this.vx * dt;
+            this.y += this.vy * dt;
+            this.vy += 800 * dt; // Gravity
+            if (this.y > 1000) this.markedForDeletion = true;
+            return;
+        }
+
+        if (this.type === 'pat') {
+            // Patrol
+            if (!this.dir) this.dir = -1;
+            this.x += 30 * this.dir * dt;
+            if (Math.abs(this.x - this.startX) > this.patrolDist) this.dir *= -1;
+        }
+        
+        if (this.type === 'josh') {
+            // Sniper
+            this.timer += dt;
+            if (this.timer > 3) {
+                this.timer = 0;
+                // Shoot mushroom
+                projectiles.push(new Projectile(this.x, this.y, player.x, player.y));
+            }
+        }
+    }
+
+    draw(ctx, camX, camY) {
+        const cx = this.x - camX;
+        const cy = this.y - camY;
+
+        // Base Body
+        ctx.fillStyle = '#ddd';
+        ctx.fillRect(cx, cy, 24, 48);
+
+        if (this.type === 'alan') {
+            // Sunglasses & Towel
+            ctx.fillStyle = '#333'; // Shirt
+            ctx.fillRect(cx+2, cy+18, 20, 16);
+            ctx.fillStyle = '#000'; // Glasses
+            ctx.fillRect(cx+4, cy+10, 16, 4);
+            ctx.fillStyle = '#00f'; // Towel
+            ctx.fillRect(cx+18, cy+18, 6, 12);
+        } else if (this.type === 'pat') {
+            // Trucker Hat & Phone
+            ctx.fillStyle = '#005500'; // Hat
+            ctx.fillRect(cx, cy, 24, 6);
+            ctx.fillStyle = '#00f'; // Jeans
+            ctx.fillRect(cx+2, cy+34, 20, 14);
+            // Phone light
+            ctx.fillStyle = '#aaf';
+            ctx.fillRect(cx+8, cy+25, 8, 6);
+        } else if (this.type === 'josh') {
+            // Man bun & Headband
+            ctx.fillStyle = '#000'; // Hair
+            ctx.fillRect(cx, cy, 24, 10);
+            ctx.fillRect(cx+8, cy-4, 8, 4); // Bun
+            ctx.fillStyle = 'orange'; // Headband
+            ctx.fillRect(cx, cy+6, 24, 2);
+        }
+        
+        if (this.isBonked) {
+            // Angry Vein icon
+            ctx.fillStyle = 'red';
+            ctx.fillText('#$@!', cx, cy - 10);
+        }
+    }
+}
+
+class Projectile extends Entity {
+    constructor(x, y, targetX, targetY) {
+        super(x, y, 12, 12, 'purple');
+        const angle = Math.atan2(targetY - y, targetX - x);
+        this.vx = Math.cos(angle) * 150;
+        this.vy = Math.sin(angle) * 150;
+        this.life = 5;
+    }
+    update(dt) {
+        this.x += this.vx * dt;
+        this.y += this.vy * dt;
+        this.life -= dt;
+        if (this.life <= 0) this.markedForDeletion = true;
+        
+        // Simple collision with player
+        if (checkOverlap(this, player)) {
+            // Reset player? Or just annoy? GDD implies obstacle.
+            // Let's make it knockback
+            player.vy = -200;
+            player.vx = this.vx > 0 ? 200 : -200;
+            this.markedForDeletion = true;
+        }
+    }
+    draw(ctx, camX, camY) {
+        ctx.fillStyle = 'purple';
+        // Draw Mushroom shape
+        ctx.beginPath();
+        ctx.arc(this.x+6 - camX, this.y+4 - camY, 6, 0, Math.PI, true);
+        ctx.fill();
+        ctx.fillRect(this.x+4 - camX, this.y+4 - camY, 4, 8);
+    }
+}
+
+class LevelSign extends Entity {
+    constructor(x, y) {
+        super(x, y, 40, 40, 'red');
+        this.triggered = false;
+        this.text = "CONDEMNED";
+    }
+    trigger() {
+        if (this.triggered) return;
+        this.triggered = true;
+        this.text = "SOLD";
+        playSound('build');
+        setTimeout(() => {
+            // Win / Restart
+            alert("LEVEL COMPLETE! Starting Over...");
+            setupLevel();
+        }, 2000);
+    }
+    draw(ctx, camX, camY) {
+        ctx.fillStyle = '#8B4513'; // Post
+        ctx.fillRect(this.x + 16 - camX, this.y - camY, 8, 40);
+        
+        ctx.fillStyle = this.triggered ? 'green' : 'red';
+        ctx.fillRect(this.x - camX, this.y - 10 - camY, 40, 20);
+        
+        ctx.fillStyle = 'white';
+        ctx.font = '8px Courier';
+        ctx.fillText(this.text, this.x + 2 - camX, this.y + 2 - camY);
+    }
+}
+
+/* ---------------------------------------------------
+   GAME LOGIC
+   ---------------------------------------------------
+*/
+
+let player;
+let entities = [];
+let blocks = [];
+let projectiles = [];
+let particles = [];
+
+function checkOverlap(rect1, rect2) {
+    return (rect1.x < rect2.x + rect2.w &&
+            rect1.x + rect1.w > rect2.x &&
+            rect1.y < rect2.y + rect2.h &&
+            rect1.y + rect1.h > rect2.y);
+}
+
+function setupLevel() {
+    player = new Player(50, 200);
+    blocks = [];
+    entities = [];
+    projectiles = [];
+    particles = [];
+    woodInventory = 0;
+    woodEl.innerText = woodInventory;
+
+    // Ground
+    blocks.push(new Block(0, 300, 2000, 60, 'solid'));
+    
+    // Walls/Platforms
+    blocks.push(new Block(300, 200, 100, 20, 'jumpthru'));
+    blocks.push(new Block(500, 150, 100, 20, 'jumpthru'));
+    blocks.push(new Block(700, 250, 20, 50, 'solid')); // Wall
+
+    // Spikes
+    blocks.push(new Block(800, 290, 100, 20, 'spike'));
+
+    // Wood Piles
+    entities.push(new WoodPile(150, 284));
+    entities.push(new WoodPile(320, 184));
+    entities.push(new WoodPile(600, 284));
+    entities.push(new WoodPile(950, 284));
+
+    // Brothers
+    entities.push(new Brother(450, 252, 'alan')); // Blocker
+    entities.push(new Brother(600, 252, 'pat')); // Wanderer
+    entities.push(new Brother(520, 102, 'josh')); // Sniper
+
+    // Level End
+    blocks.push(new LevelSign(1200, 260));
+}
+
+function buildSystem(dt) {
+    // Handle Time Scale for Menu
+    if (keys.c) {
+        timeScale = 0.1;
+        // Draw Menu Logic happens in Render
+        
+        // Input for building
+        if (keys.ArrowRight) {
+            // Debounce needed or require press? Let's do simple check
+            if (!keys.buildLock) {
+                if (woodInventory >= 20) {
+                    woodInventory -= 20;
+                    woodEl.innerText = woodInventory;
+                    playSound('build');
+                    // Build Plank in front
+                    const buildX = player.facing === 1 ? player.x + 40 : player.x - 60;
+                    const newBlock = new Block(buildX, player.y + 20, 60, 10, 'solid');
+                    newBlock.color = '#CD853F'; // Peru color for wood plank
+                    
+                    // Check invalid placement (overlap player)
+                    if (!checkOverlap(newBlock, player)) {
+                        blocks.push(newBlock);
+                    } else {
+                        // Undo if stuck in player
+                        woodInventory += 20; 
+                        playSound('error');
+                    }
+                } else {
+                    playSound('error');
+                }
+                keys.buildLock = true;
+            }
+        } else {
+            keys.buildLock = false;
+        }
+    } else {
+        timeScale = 1.0;
+    }
+}
+
+function gameLoop(timestamp) {
+    if (!lastTime) lastTime = timestamp;
+    const dtRaw = (timestamp - lastTime) / 1000;
+    lastTime = timestamp;
+    
+    // Cap dt to prevent explosion on lag
+    const dt = Math.min(dtRaw, 0.1) * timeScale;
+
+    if (gameActive) {
+        // --- UPDATE ---
+        
+        buildSystem(dt);
+        
+        player.update(dt, blocks);
+        if (player.huntingSequence) player.handleHuntingLogic(dt);
+
+        // Player Hammer Check
+        if (player.attackTimer > 0) {
+            // Create Hitbox
+            const hitX = player.facing === 1 ? player.x + 24 : player.x - 24;
+            const hammerBox = {x: hitX, y: player.y + 10, w: 24, h: 24};
+            
+            // Hit Brothers
+            entities.forEach(e => {
+                if (e instanceof Brother && checkOverlap(hammerBox, e)) {
+                    e.bonk();
+                }
+                // Hit Wood
+                if (e instanceof WoodPile && !e.markedForDeletion && checkOverlap(hammerBox, e)) {
+                    e.markedForDeletion = true;
+                    woodInventory = Math.min(woodInventory + 10, 99);
+                    woodEl.innerText = woodInventory;
+                    playSound('crunch');
+                    
+                    // Particle effect
+                    for(let i=0; i<5; i++) {
+                        particles.push(new Particle(e.x, e.y, Math.random()*100-50, -Math.random()*100, 0.5, '#deb887'));
+                    }
+                }
+            });
+        }
+
+        // Update Entities
+        entities.forEach(e => e.update(dt, blocks));
+        projectiles.forEach(p => p.update(dt));
+        particles.forEach(p => p.update(dt));
+
+        // Cleanup
+        entities = entities.filter(e => !e.markedForDeletion);
+        projectiles = projectiles.filter(p => !p.markedForDeletion);
+        particles = particles.filter(p => !p.markedForDeletion);
+
+        // --- DRAW ---
+        
+        // Camera
+        let camX = player.x - canvas.width/2;
+        let camY = player.y - canvas.height/2;
+        // Clamp camera (roughly)
+        camY = Math.min(Math.max(camY, 0), 500);
+        camX = Math.max(camX, 0);
+
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+        // Layer 1: Midground
+        blocks.forEach(b => b.draw(ctx, camX, camY));
+        entities.forEach(e => e.draw(ctx, camX, camY));
+        projectiles.forEach(p => p.draw(ctx, camX, camY));
+        player.draw(ctx, camX, camY);
+        particles.forEach(p => p.draw(ctx, camX, camY));
+
+        // Layer 2: UI / Build Menu
+        if (keys.c) {
+            // Dim background
+            ctx.fillStyle = 'rgba(0,0,0,0.5)';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            
+            // Menu Box
+            ctx.fillStyle = '#333';
+            ctx.strokeStyle = '#fff';
+            ctx.lineWidth = 4;
+            ctx.fillRect(player.x - camX - 60, player.y - camY - 80, 140, 60);
+            ctx.strokeRect(player.x - camX - 60, player.y - camY - 80, 140, 60);
+            
+            ctx.fillStyle = '#fff';
+            ctx.font = '10px Courier';
+            ctx.fillText("BUILD MODE", player.x - camX - 50, player.y - camY - 65);
+            
+            ctx.fillText("Press -> to Build", player.x - camX - 55, player.y - camY - 50);
+            ctx.fillText("PLANK (20 Wood)", player.x - camX - 55, player.y - camY - 35);
+        }
+    }
+
+    requestAnimationFrame(gameLoop);
+}
+
+/* ---------------------------------------------------
+   INPUT & INIT
+   ---------------------------------------------------
+*/
+
+function startGame() {
+    initAudio();
+    startScreen.style.display = 'none';
+    gameActive = true;
+    setupLevel();
+    requestAnimationFrame(gameLoop);
+}
+
+window.addEventListener('keydown', (e) => {
+    if (e.key === 'ArrowLeft') keys.ArrowLeft = true;
+    if (e.key === 'ArrowRight') keys.ArrowRight = true;
+    if (e.key === 'ArrowUp') keys.ArrowUp = true;
+    if (e.key === 'ArrowDown') keys.ArrowDown = true;
+    if (e.key.toLowerCase() === 'z') keys.z = true;
+    if (e.key.toLowerCase() === 'x') keys.x = true;
+    if (e.key.toLowerCase() === 'c') keys.c = true;
+});
+
+window.addEventListener('keyup', (e) => {
+    if (e.key === 'ArrowLeft') keys.ArrowLeft = false;
+    if (e.key === 'ArrowRight') keys.ArrowRight = false;
+    if (e.key === 'ArrowUp') keys.ArrowUp = false;
+    if (e.key === 'ArrowDown') keys.ArrowDown = false;
+    if (e.key.toLowerCase() === 'z') keys.z = false;
+    if (e.key.toLowerCase() === 'x') keys.x = false;
+    if (e.key.toLowerCase() === 'c') keys.c = false;
+});
+
+</script>
+</body>
+</html>
