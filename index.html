@@ -2,852 +2,571 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-    <title>SUPER JOSEY BUILDER</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Josey Builders | Building Legacies</title>
+    
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- React & ReactDOM -->
+    <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    
+    <!-- Babel for JSX -->
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
+    <!-- Font -->
     <style>
-        body {
-            margin: 0;
-            background-color: #222;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            height: 100vh;
-            font-family: 'Courier New', Courier, monospace;
-            overflow: hidden;
-            touch-action: none; /* Prevents zooming/scrolling on mobile */
-            user-select: none;
-            -webkit-user-select: none;
-        }
-        #game-container {
-            position: relative;
-            box-shadow: 0 0 20px rgba(0,0,0,0.5);
-        }
-        canvas {
-            display: block;
-            image-rendering: pixelated; 
-            background-color: #87CEEB; 
-            max-width: 100%;
-            max-height: 100vh;
-        }
-        #ui-overlay {
-            position: absolute;
-            top: 10px;
-            left: 10px;
-            color: white;
-            text-shadow: 2px 2px 0 #000;
-            font-weight: bold;
-            pointer-events: none;
-            font-size: 14px;
-            z-index: 10;
-        }
-        #start-screen {
-            position: absolute;
-            top: 0; left: 0; width: 100%; height: 100%;
-            background: rgba(0,0,0,0.8);
-            color: white;
-            display: flex;
-            flex-direction: column;
-            justify-content: center;
-            align-items: center;
-            cursor: pointer;
-            z-index: 100;
-            text-align: center;
-        }
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;700;900&family=JetBrains+Mono:wght@400&display=swap');
         
-        /* --- MOBILE CONTROLS CSS --- */
-        #mobile-controls {
-            display: none; /* Hidden on desktop by default */
-            position: absolute;
-            bottom: 20px;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            pointer-events: none; /* Let touches pass through to buttons */
-            z-index: 50;
-        }
-
-        /* Only show controls on screens smaller than 800px */
-        @media (max-width: 800px) {
-            #mobile-controls { display: block; }
-        }
-
-        .control-btn {
-            position: absolute;
-            background: rgba(255, 255, 255, 0.2);
-            border: 2px solid rgba(255, 255, 255, 0.5);
-            border-radius: 50%;
-            width: 60px;
-            height: 60px;
-            pointer-events: auto; /* Re-enable clicks */
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            color: white;
-            font-weight: bold;
-            font-size: 18px;
-            touch-action: none;
-        }
-
-        .control-btn:active {
-            background: rgba(255, 255, 255, 0.5);
-        }
-
-        /* D-PAD */
-        #btn-left { bottom: 30px; left: 20px; }
-        #btn-right { bottom: 30px; left: 100px; }
-
-        /* ACTIONS */
-        #btn-jump { bottom: 30px; right: 20px; background: rgba(0, 255, 0, 0.2); } /* Z - Greenish */
-        #btn-attack { bottom: 30px; right: 100px; background: rgba(255, 0, 0, 0.2); } /* X - Reddish */
+        body { font-family: 'Inter', sans-serif; }
+        .font-mono { font-family: 'JetBrains Mono', monospace; }
         
-        /* BUILD MENU (Top Right) */
-        #btn-build { 
-            bottom: 110px; 
-            right: 20px; 
-            width: 50px; height: 50px; 
-            background: rgba(255, 255, 0, 0.2); 
-            border-radius: 10px; /* Square */
-            font-size: 12px;
-        }
-
+        /* Smooth Scroll */
+        html { scroll-behavior: smooth; }
     </style>
 </head>
-<body>
+<body class="bg-stone-50 text-stone-900 selection:bg-stone-900 selection:text-white">
 
-<div id="game-container">
-    <canvas id="gameCanvas" width="640" height="360"></canvas>
-    
-    <div id="ui-overlay">
-        <div>SCORE: <span id="score">0</span></div>
-        <div>WOOD: <span id="wood">0</span>/99</div>
-    </div>
+    <div id="root"></div>
 
-    <!-- MOBILE CONTROLS -->
-    <div id="mobile-controls">
-        <div id="btn-left" class="control-btn">←</div>
-        <div id="btn-right" class="control-btn">→</div>
-        <div id="btn-attack" class="control-btn">X</div>
-        <div id="btn-jump" class="control-btn">Z</div>
-        <div id="btn-build" class="control-btn">BLD</div>
-    </div>
+    <script type="text/babel">
+        const { useState, useEffect, useRef } = React;
 
-    <div id="start-screen" onclick="startGame()">
-        <h1>SUPER JOSEY BUILDER</h1>
-        <p>TAP TO START</p>
-        <p>Mobile: Use on-screen buttons</p>
-        <p>Desktop: Arrows, Z, X, C</p>
-    </div>
-</div>
+        // --- ICONS (Inlined for portability) ---
+        const Icon = ({ children, ...props }) => (
+            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}>{children}</svg>
+        );
+        const Phone = (p) => <Icon {...p}><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/></Icon>;
+        const Mail = (p) => <Icon {...p}><rect width="20" height="16" x="2" y="4" rx="2"/><path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"/></Icon>;
+        const MapPin = (p) => <Icon {...p}><path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"/><circle cx="12" cy="10" r="3"/></Icon>;
+        const Hammer = (p) => <Icon {...p}><path d="m15 12-8.5 8.5c-.83.83-2.17.83-3 0 0 0 0 0 0 0a2.12 2.12 0 0 1 0-3L12 9"/><path d="M17.64 15 22 10.64"/><path d="m20.91 11.7-1.25-1.25c-.6-.6-.93-1.4-.93-2.25V2.46V2a2 2 0 0 0-2-2h-3a2 2 0 0 0-2 2v.46c0 .85-.33 1.65-.93 2.25L9.5 6"/><path d="M15 12.5 10.5 8"/></Icon>;
+        const Ruler = (p) => <Icon {...p}><path d="M21.3 15.3a2.4 2.4 0 0 1 0 3.4l-2.6 2.6a2.4 2.4 0 0 1-3.4 0L2.7 8.7a2.41 2.41 0 0 1 0-3.4l2.6-2.6a2.41 2.41 0 0 1 3.4 0Z"/><path d="m14.5 12.5 2-2"/><path d="m11.5 9.5 2-2"/><path d="m8.5 6.5 2-2"/><path d="m17.5 15.5 2-2"/></Icon>;
+        const HardHat = (p) => <Icon {...p}><path d="M2 18a1 1 0 0 0 1 1h18a1 1 0 0 0 1-1v-2a1 1 0 0 0-1-1H3a1 1 0 0 0-1 1v2z"/><path d="M10 10V5a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1v5"/><path d="M4 15v-3a6 6 0 0 1 6-6h0"/><path d="M14 6h0a6 6 0 0 1 6 6v3"/></Icon>;
+        const ArrowRight = (p) => <Icon {...p}><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></Icon>;
+        const CheckCircle2 = (p) => <Icon {...p}><circle cx="12" cy="12" r="10"/><path d="m9 12 2 2 4-4"/></Icon>;
+        const Menu = (p) => <Icon {...p}><line x1="4" x2="20" y1="12" y2="12"/><line x1="4" x2="20" y1="6" y2="6"/><line x1="4" x2="20" y1="18" y2="18"/></Icon>;
+        const X = (p) => <Icon {...p}><path d="M18 6 6 18"/><path d="m6 6 12 12"/></Icon>;
+        const Calculator = (p) => <Icon {...p}><rect width="16" height="20" x="4" y="2" rx="2"/><line x1="8" x2="16" y1="6" y2="6"/><line x1="16" x2="16" y1="14" y2="18"/><path d="M16 10h.01"/><path d="M12 10h.01"/><path d="M8 10h.01"/><path d="M12 14h.01"/><path d="M8 14h.01"/><path d="M12 18h.01"/><path d="M8 18h.01"/></Icon>;
 
-<script>
-/* ---------------------------------------------------
-   GAME ENGINE & CONSTANTS
-   ---------------------------------------------------
-*/
-const canvas = document.getElementById('gameCanvas');
-const ctx = canvas.getContext('2d');
-const scoreEl = document.getElementById('score');
-const woodEl = document.getElementById('wood');
-const startScreen = document.getElementById('start-screen');
+        // --- COMPONENTS ---
 
-// Game State
-let gameActive = false;
-let lastTime = 0;
-let timeScale = 1.0;
-let globalScore = 0;
-let woodInventory = 0;
-let currentLevel = 1;
+        const LogoSVG = ({ className, color = "currentColor" }) => (
+          <svg viewBox="0 0 400 220" className={className} fill="none" xmlns="http://www.w3.org/2000/svg">
+            <path 
+              d="M50 190 L50 80 L110 30" 
+              stroke={color} 
+              strokeWidth="6" 
+              fill="none" 
+              strokeLinecap="square" 
+              strokeLinejoin="miter"
+            />
+            <path 
+              d="M106 30 L350 30 L350 80 L145 80 Z" 
+              fill={color} 
+            />
+            <path 
+              d="M350 80 L350 190 L50 190" 
+              stroke={color} 
+              strokeWidth="6" 
+              fill="none" 
+              strokeLinecap="square"
+              strokeLinejoin="miter"
+            />
+            <g transform="translate(0, 15)">
+              <text 
+                x="200" 
+                y="115" 
+                textAnchor="middle" 
+                fontFamily="Arial, Helvetica, sans-serif" 
+                fontWeight="900" 
+                fontSize="60" 
+                fill={color}
+                textLength="260" 
+                lengthAdjust="spacingAndGlyphs"
+              >
+                JOSEY
+              </text>
+              <text 
+                x="200" 
+                y="155" 
+                textAnchor="middle" 
+                fontFamily="Arial, Helvetica, sans-serif" 
+                fontWeight="bold" 
+                fontSize="28" 
+                fill={color} 
+                textLength="260"
+                lengthAdjust="spacingAndGlyphs"
+              >
+                BUILDERS
+              </text>
+            </g>
+          </svg>
+        );
 
-// Inputs
-const keys = {
-    ArrowLeft: false,
-    ArrowRight: false,
-    ArrowUp: false,
-    ArrowDown: false,
-    z: false, // Jump
-    x: false, // Attack
-    c: false  // Build
-};
+        const Section = ({ children, className = "", id = "" }) => (
+          <section id={id} className={`py-20 px-6 md:px-12 lg:px-24 ${className}`}>
+            {children}
+          </section>
+        );
 
-// Audio Context
-let audioCtx;
+        const FadeIn = ({ children, delay = 0 }) => {
+          const [isVisible, setIsVisible] = useState(false);
+          const domRef = useRef();
 
-function initAudio() {
-    if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-}
-
-function playSound(type) {
-    if (!audioCtx) return;
-    const osc = audioCtx.createOscillator();
-    const gain = audioCtx.createGain();
-    osc.connect(gain);
-    gain.connect(audioCtx.destination);
-
-    const now = audioCtx.currentTime;
-
-    if (type === 'jump') {
-        osc.type = 'square';
-        osc.frequency.setValueAtTime(150, now);
-        osc.frequency.linearRampToValueAtTime(300, now + 0.1);
-        gain.gain.setValueAtTime(0.1, now);
-        gain.gain.linearRampToValueAtTime(0, now + 0.1);
-        osc.start(now);
-        osc.stop(now + 0.1);
-    } else if (type === 'hammer') {
-        osc.type = 'triangle';
-        osc.frequency.setValueAtTime(300, now);
-        osc.frequency.exponentialRampToValueAtTime(50, now + 0.2);
-        gain.gain.setValueAtTime(0.1, now);
-        gain.gain.linearRampToValueAtTime(0, now + 0.2);
-        osc.start(now);
-        osc.stop(now + 0.2);
-    } else if (type === 'bonk') {
-        osc.type = 'sawtooth';
-        osc.frequency.setValueAtTime(100, now);
-        osc.frequency.linearRampToValueAtTime(800, now + 0.1);
-        gain.gain.setValueAtTime(0.2, now);
-        gain.gain.linearRampToValueAtTime(0, now + 0.1);
-        osc.start(now);
-        osc.stop(now + 0.1);
-    } else if (type === 'crunch') {
-        osc.type = 'square';
-        osc.frequency.setValueAtTime(100, now);
-        gain.gain.setValueAtTime(0.1, now);
-        gain.gain.exponentialRampToValueAtTime(0.01, now + 0.1);
-        osc.start(now);
-        osc.stop(now + 0.1);
-    } else if (type === 'gunshot') {
-        const bufferSize = audioCtx.sampleRate * 0.5;
-        const buffer = audioCtx.createBuffer(1, bufferSize, audioCtx.sampleRate);
-        const data = buffer.getChannelData(0);
-        for (let i = 0; i < bufferSize; i++) {
-            data[i] = Math.random() * 2 - 1;
-        }
-        const noise = audioCtx.createBufferSource();
-        noise.buffer = buffer;
-        noise.connect(gain);
-        gain.gain.setValueAtTime(0.3, now);
-        gain.gain.exponentialRampToValueAtTime(0.01, now + 0.3);
-        noise.start(now);
-    } else if (type === 'build') {
-        osc.type = 'sine';
-        osc.frequency.setValueAtTime(440, now);
-        osc.frequency.setValueAtTime(880, now + 0.1);
-        gain.gain.setValueAtTime(0.1, now);
-        gain.gain.linearRampToValueAtTime(0, now + 0.2);
-        osc.start(now);
-        osc.stop(now + 0.2);
-    } else if (type === 'error') {
-        osc.type = 'sawtooth';
-        osc.frequency.setValueAtTime(100, now);
-        osc.frequency.setValueAtTime(80, now + 0.1);
-        gain.gain.setValueAtTime(0.2, now);
-        gain.gain.linearRampToValueAtTime(0, now + 0.2);
-        osc.start(now);
-        osc.stop(now + 0.2);
-    }
-}
-
-/* ---------------------------------------------------
-   ENTITIES & CLASSES
-   ---------------------------------------------------
-*/
-
-class Entity {
-    constructor(x, y, w, h, color) {
-        this.x = x;
-        this.y = y;
-        this.w = w;
-        this.h = h;
-        this.color = color;
-        this.vx = 0;
-        this.vy = 0;
-        this.grounded = false;
-        this.markedForDeletion = false;
-    }
-    
-    draw(ctx, camX, camY) {
-        ctx.fillStyle = this.color;
-        ctx.fillRect(this.x - camX, this.y - camY, this.w, this.h);
-    }
-    
-    update(dt, blocks) {}
-}
-
-class Block extends Entity {
-    constructor(x, y, w, h, type) {
-        super(x, y, w, h, '#654321');
-        this.type = type; 
-        if (type === 'solid') this.color = '#5c4033'; 
-        if (type === 'jumpthru') this.color = '#8b4513'; 
-        if (type === 'spike') this.color = '#888'; 
-    }
-
-    draw(ctx, camX, camY) {
-        super.draw(ctx, camX, camY);
-        if (this.type === 'solid') {
-            ctx.fillStyle = '#228b22';
-            ctx.fillRect(this.x - camX, this.y - camY, this.w, 4);
-        }
-        if (this.type === 'spike') {
-            ctx.fillStyle = '#aaa';
-            ctx.beginPath();
-            ctx.moveTo(this.x - camX, this.y + this.h - camY);
-            ctx.lineTo(this.x + this.w/2 - camX, this.y - camY);
-            ctx.lineTo(this.x + this.w - camX, this.y + this.h - camY);
-            ctx.fill();
-        }
-    }
-}
-
-class WoodPile extends Entity {
-    constructor(x, y) {
-        super(x, y, 32, 16, '#deb887');
-    }
-    draw(ctx, camX, camY) {
-        ctx.fillStyle = this.color;
-        ctx.beginPath();
-        ctx.arc(this.x + 8 - camX, this.y + 8 - camY, 6, 0, Math.PI*2);
-        ctx.arc(this.x + 16 - camX, this.y + 4 - camY, 6, 0, Math.PI*2);
-        ctx.arc(this.x + 24 - camX, this.y + 8 - camY, 6, 0, Math.PI*2);
-        ctx.fill();
-    }
-}
-
-class Particle extends Entity {
-    constructor(x, y, vx, vy, life, color) {
-        super(x, y, 4, 4, color);
-        this.vx = vx;
-        this.vy = vy;
-        this.life = life;
-    }
-    update(dt) {
-        this.x += this.vx * dt;
-        this.y += this.vy * dt;
-        this.life -= dt;
-        if (this.life <= 0) this.markedForDeletion = true;
-    }
-}
-
-class Player extends Entity {
-    constructor(x, y) {
-        super(x, y, 24, 48, '#000'); 
-        this.speed = 200;
-        this.jumpForce = -450;
-        this.gravity = 1200;
-        this.facing = 1; 
-        this.idleTimer = 0;
-        this.huntingSequence = false;
-        this.attackTimer = 0;
-        this.buck = null; 
-    }
-
-    update(dt, blocks) {
-        if (!this.huntingSequence) {
-            if (keys.ArrowRight) { this.vx = this.speed; this.facing = 1; }
-            else if (keys.ArrowLeft) { this.vx = -this.speed; this.facing = -1; }
-            else { this.vx = 0; }
-
-            if (keys.z && this.grounded) {
-                this.vy = this.jumpForce;
-                this.grounded = false;
-                playSound('jump');
-                keys.z = false; 
-            }
-
-            if (keys.x && this.attackTimer <= 0) {
-                this.attackTimer = 0.2; 
-                playSound('hammer');
-            }
-            if (this.attackTimer > 0) this.attackTimer -= dt;
-        }
-
-        this.vy += this.gravity * dt;
-        this.x += this.vx * dt;
-        this.handleCollisions(blocks, 'x');
-        this.y += this.vy * dt;
-        this.handleCollisions(blocks, 'y');
-
-        if (this.y > 1000) {
-            this.respawn();
-        }
-
-        if (Math.abs(this.vx) < 1 && this.grounded && !this.huntingSequence) {
-            this.idleTimer += dt;
-            if (this.idleTimer > 5) {
-                this.startHuntingSequence();
-            }
-        } else {
-            this.idleTimer = 0;
-        }
-    }
-
-    startHuntingSequence() {
-        this.huntingSequence = true;
-        this.buck = {
-            x: this.x + (this.facing * 200),
-            y: this.y,
-            w: 32, h: 32,
-            state: 'alive',
-            life: 2.0 
-        };
-    }
-
-    handleHuntingLogic(dt) {
-        if (!this.huntingSequence || !this.buck) return;
-        
-        this.buck.life -= dt;
-
-        if (this.buck.life <= 0 && this.buck.state === 'alive') {
-            playSound('gunshot');
-            this.buck.state = 'dead';
-            setTimeout(() => {
-                this.huntingSequence = false;
-                this.buck = null;
-                this.idleTimer = 0;
-            }, 1000);
-        }
-    }
-
-    handleCollisions(blocks, axis) {
-        this.grounded = false;
-        for (let block of blocks) {
-            if (checkOverlap(this, block)) {
-                if (block.type === 'spike') {
-                    this.respawn();
-                    return;
-                }
-                
-                if (block instanceof LevelSign) {
-                    block.trigger();
-                    return;
-                }
-
-                if (axis === 'x') {
-                    if (this.vx > 0) this.x = block.x - this.w;
-                    if (this.vx < 0) this.x = block.x + block.w;
-                    this.vx = 0;
-                } else {
-                    if (this.vy > 0) { 
-                        if (block.type === 'jumpthru' && this.y + this.h - (this.vy * 0.05) > block.y) {
-                            continue;
-                        }
-                        this.y = block.y - this.h;
-                        this.grounded = true;
-                        this.vy = 0;
-                    } else if (this.vy < 0 && block.type === 'solid') { 
-                        this.y = block.y + block.h;
-                        this.vy = 0;
-                    }
-                }
-            }
-        }
-    }
-
-    respawn() {
-        this.x = 50;
-        this.y = 200;
-        this.vx = 0;
-        this.vy = 0;
-        scoreEl.innerText = globalScore; 
-    }
-
-    draw(ctx, camX, camY) {
-        const cx = this.x - camX;
-        const cy = this.y - camY;
-
-        if (this.huntingSequence) {
-            ctx.fillStyle = 'brown';
-            ctx.fillRect(cx + (this.facing*10), cy + 20, 20, 4);
-        }
-
-        ctx.fillStyle = '#ff0000';
-        ctx.fillRect(cx, cy, 24, 8);
-        ctx.fillRect(cx + (this.facing === 1 ? 16 : -4), cy + 4, 12, 4); 
-
-        ctx.fillStyle = '#ffccaa';
-        ctx.fillRect(cx + 4, cy + 8, 16, 10);
-
-        ctx.fillStyle = '#fff';
-        ctx.fillRect(cx + 2, cy + 18, 20, 16);
-
-        ctx.fillStyle = '#55aaff';
-        ctx.fillRect(cx + 2, cy + 34, 20, 8);
-
-        ctx.fillStyle = '#654321';
-        ctx.fillRect(cx + 2, cy + 42, 8, 6);
-        ctx.fillRect(cx + 14, cy + 42, 8, 6);
-
-        if (this.attackTimer > 0) {
-            ctx.fillStyle = '#888'; 
-            const hx = this.facing === 1 ? cx + 24 : cx - 16;
-            const hy = cy + 20;
-            ctx.fillRect(hx, hy, 16, 10);
-            ctx.fillStyle = '#654321'; 
-            ctx.fillRect(hx + 6, hy + 10, 4, 10);
-        }
-
-        if (this.huntingSequence && this.buck) {
-            const bx = this.buck.x - camX;
-            const by = this.buck.y - camY + 16; 
-            
-            ctx.fillStyle = '#d2b48c';
-            if (this.buck.state === 'alive') {
-                ctx.fillRect(bx, by, 30, 20); 
-                ctx.fillRect(bx, by-10, 10, 10); 
-                ctx.fillStyle = '#fff'; 
-                ctx.fillRect(bx, by-16, 2, 6);
-                ctx.fillRect(bx+4, by-16, 2, 6);
-            } else {
-                ctx.fillRect(bx, by+10, 30, 10); 
-            }
-        }
-    }
-}
-
-class Brother extends Entity {
-    constructor(x, y, type) {
-        super(x, y, 24, 48, '#f0f');
-        this.type = type; 
-        this.startX = x;
-        this.patrolDist = 100;
-        this.timer = 0;
-        this.isBonked = false;
-    }
-
-    bonk() {
-        if (this.isBonked) return;
-        this.isBonked = true;
-        this.vx = 400; 
-        this.vy = -400; 
-        playSound('bonk');
-        particles.push(new Particle(this.x, this.y - 10, 0, -10, 1, 'red'));
-    }
-
-    update(dt, blocks) {
-        if (this.isBonked) {
-            this.x += this.vx * dt;
-            this.y += this.vy * dt;
-            this.vy += 800 * dt; 
-            if (this.y > 1000) this.markedForDeletion = true;
-            return;
-        }
-
-        if (this.type === 'pat') {
-            if (!this.dir) this.dir = -1;
-            this.x += 30 * this.dir * dt;
-            if (Math.abs(this.x - this.startX) > this.patrolDist) this.dir *= -1;
-        }
-        
-        if (this.type === 'josh') {
-            this.timer += dt;
-            if (this.timer > 3) {
-                this.timer = 0;
-                projectiles.push(new Projectile(this.x, this.y, player.x, player.y));
-            }
-        }
-    }
-
-    draw(ctx, camX, camY) {
-        const cx = this.x - camX;
-        const cy = this.y - camY;
-
-        ctx.fillStyle = '#ddd';
-        ctx.fillRect(cx, cy, 24, 48);
-
-        if (this.type === 'alan') {
-            ctx.fillStyle = '#333'; 
-            ctx.fillRect(cx+2, cy+18, 20, 16);
-            ctx.fillStyle = '#000'; 
-            ctx.fillRect(cx+4, cy+10, 16, 4);
-            ctx.fillStyle = '#00f'; 
-            ctx.fillRect(cx+18, cy+18, 6, 12);
-        } else if (this.type === 'pat') {
-            ctx.fillStyle = '#005500'; 
-            ctx.fillRect(cx, cy, 24, 6);
-            ctx.fillStyle = '#00f'; 
-            ctx.fillRect(cx+2, cy+34, 20, 14);
-            ctx.fillStyle = '#aaf';
-            ctx.fillRect(cx+8, cy+25, 8, 6);
-        } else if (this.type === 'josh') {
-            ctx.fillStyle = '#000'; 
-            ctx.fillRect(cx, cy, 24, 10);
-            ctx.fillRect(cx+8, cy-4, 8, 4); 
-            ctx.fillStyle = 'orange'; 
-            ctx.fillRect(cx, cy+6, 24, 2);
-        }
-        
-        if (this.isBonked) {
-            ctx.fillStyle = 'red';
-            ctx.fillText('#$@!', cx, cy - 10);
-        }
-    }
-}
-
-class Projectile extends Entity {
-    constructor(x, y, targetX, targetY) {
-        super(x, y, 12, 12, 'purple');
-        const angle = Math.atan2(targetY - y, targetX - x);
-        this.vx = Math.cos(angle) * 150;
-        this.vy = Math.sin(angle) * 150;
-        this.life = 5;
-    }
-    update(dt) {
-        this.x += this.vx * dt;
-        this.y += this.vy * dt;
-        this.life -= dt;
-        if (this.life <= 0) this.markedForDeletion = true;
-        
-        if (checkOverlap(this, player)) {
-            player.vy = -200;
-            player.vx = this.vx > 0 ? 200 : -200;
-            this.markedForDeletion = true;
-        }
-    }
-    draw(ctx, camX, camY) {
-        ctx.fillStyle = 'purple';
-        ctx.beginPath();
-        ctx.arc(this.x+6 - camX, this.y+4 - camY, 6, 0, Math.PI, true);
-        ctx.fill();
-        ctx.fillRect(this.x+4 - camX, this.y+4 - camY, 4, 8);
-    }
-}
-
-class LevelSign extends Entity {
-    constructor(x, y) {
-        super(x, y, 40, 40, 'red');
-        this.triggered = false;
-        this.text = "CONDEMNED";
-    }
-    trigger() {
-        if (this.triggered) return;
-        this.triggered = true;
-        this.text = "SOLD";
-        playSound('build');
-        setTimeout(() => {
-            alert("LEVEL COMPLETE! Starting Over...");
-            setupLevel();
-        }, 2000);
-    }
-    draw(ctx, camX, camY) {
-        ctx.fillStyle = '#8B4513'; 
-        ctx.fillRect(this.x + 16 - camX, this.y - camY, 8, 40);
-        
-        ctx.fillStyle = this.triggered ? 'green' : 'red';
-        ctx.fillRect(this.x - camX, this.y - 10 - camY, 40, 20);
-        
-        ctx.fillStyle = 'white';
-        ctx.font = '8px Courier';
-        ctx.fillText(this.text, this.x + 2 - camX, this.y + 2 - camY);
-    }
-}
-
-/* ---------------------------------------------------
-   GAME LOGIC
-   ---------------------------------------------------
-*/
-
-let player;
-let entities = [];
-let blocks = [];
-let projectiles = [];
-let particles = [];
-
-function checkOverlap(rect1, rect2) {
-    return (rect1.x < rect2.x + rect2.w &&
-            rect1.x + rect1.w > rect2.x &&
-            rect1.y < rect2.y + rect2.h &&
-            rect1.y + rect1.h > rect2.y);
-}
-
-function setupLevel() {
-    player = new Player(50, 200);
-    blocks = [];
-    entities = [];
-    projectiles = [];
-    particles = [];
-    woodInventory = 0;
-    woodEl.innerText = woodInventory;
-
-    blocks.push(new Block(0, 300, 2000, 60, 'solid'));
-    
-    blocks.push(new Block(300, 200, 100, 20, 'jumpthru'));
-    blocks.push(new Block(500, 150, 100, 20, 'jumpthru'));
-    blocks.push(new Block(700, 250, 20, 50, 'solid')); 
-
-    blocks.push(new Block(800, 290, 100, 20, 'spike'));
-
-    entities.push(new WoodPile(150, 284));
-    entities.push(new WoodPile(320, 184));
-    entities.push(new WoodPile(600, 284));
-    entities.push(new WoodPile(950, 284));
-
-    entities.push(new Brother(450, 252, 'alan')); 
-    entities.push(new Brother(600, 252, 'pat')); 
-    entities.push(new Brother(520, 102, 'josh')); 
-
-    blocks.push(new LevelSign(1200, 260));
-}
-
-function buildSystem(dt) {
-    if (keys.c) {
-        timeScale = 0.1;
-        if (keys.ArrowRight) {
-            if (!keys.buildLock) {
-                if (woodInventory >= 20) {
-                    woodInventory -= 20;
-                    woodEl.innerText = woodInventory;
-                    playSound('build');
-                    const buildX = player.facing === 1 ? player.x + 40 : player.x - 60;
-                    const newBlock = new Block(buildX, player.y + 20, 60, 10, 'solid');
-                    newBlock.color = '#CD853F'; 
-                    
-                    if (!checkOverlap(newBlock, player)) {
-                        blocks.push(newBlock);
-                    } else {
-                        woodInventory += 20; 
-                        playSound('error');
-                    }
-                } else {
-                    playSound('error');
-                }
-                keys.buildLock = true;
-            }
-        } else {
-            keys.buildLock = false;
-        }
-    } else {
-        timeScale = 1.0;
-    }
-}
-
-function gameLoop(timestamp) {
-    if (!lastTime) lastTime = timestamp;
-    const dtRaw = (timestamp - lastTime) / 1000;
-    lastTime = timestamp;
-    
-    const dt = Math.min(dtRaw, 0.1) * timeScale;
-
-    if (gameActive) {
-        buildSystem(dt);
-        player.update(dt, blocks);
-        if (player.huntingSequence) player.handleHuntingLogic(dt);
-
-        if (player.attackTimer > 0) {
-            const hitX = player.facing === 1 ? player.x + 24 : player.x - 24;
-            const hammerBox = {x: hitX, y: player.y + 10, w: 24, h: 24};
-            
-            entities.forEach(e => {
-                if (e instanceof Brother && checkOverlap(hammerBox, e)) {
-                    e.bonk();
-                }
-                if (e instanceof WoodPile && !e.markedForDeletion && checkOverlap(hammerBox, e)) {
-                    e.markedForDeletion = true;
-                    woodInventory = Math.min(woodInventory + 10, 99);
-                    woodEl.innerText = woodInventory;
-                    playSound('crunch');
-                    
-                    for(let i=0; i<5; i++) {
-                        particles.push(new Particle(e.x, e.y, Math.random()*100-50, -Math.random()*100, 0.5, '#deb887'));
-                    }
-                }
+          useEffect(() => {
+            const observer = new IntersectionObserver(entries => {
+              entries.forEach(entry => setIsVisible(entry.isIntersecting));
             });
-        }
+            const currentElement = domRef.current;
+            if (currentElement) observer.observe(currentElement);
+            return () => {
+              if (currentElement) observer.unobserve(currentElement);
+            };
+          }, []);
 
-        entities.forEach(e => e.update(dt, blocks));
-        projectiles.forEach(p => p.update(dt));
-        particles.forEach(p => p.update(dt));
+          return (
+            <div
+              ref={domRef}
+              className={`transition-all duration-1000 ease-out transform ${
+                isVisible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-10'
+              }`}
+              style={{ transitionDelay: `${delay}ms` }}
+            >
+              {children}
+            </div>
+          );
+        };
 
-        entities = entities.filter(e => !e.markedForDeletion);
-        projectiles = projectiles.filter(p => !p.markedForDeletion);
-        particles = particles.filter(p => !p.markedForDeletion);
+        const ConstructionCalculator = () => {
+          const [projectType, setProjectType] = useState('newBuild');
+          const [sqFt, setSqFt] = useState(2000);
+          const [quality, setQuality] = useState('standard');
+          const [estimate, setEstimate] = useState(0);
 
-        let camX = player.x - canvas.width/2;
-        let camY = player.y - canvas.height/2;
-        camY = Math.min(Math.max(camY, 0), 500);
-        camX = Math.max(camX, 0);
+          const calculateEstimate = () => {
+            let baseRate = 0;
+            switch(projectType) {
+              case 'newBuild': baseRate = 180; break;
+              case 'remodelFull': baseRate = 100; break;
+              case 'remodelKitchen': baseRate = 250; break;
+              case 'remodelBath': baseRate = 300; break;
+              default: baseRate = 150;
+            }
 
-        ctx.clearRect(0, 0, canvas.width, canvas.height);
+            let multiplier = 1;
+            switch(quality) {
+              case 'standard': multiplier = 1; break;
+              case 'premium': multiplier = 1.35; break;
+              case 'luxury': multiplier = 1.75; break;
+              default: multiplier = 1;
+            }
 
-        blocks.forEach(b => b.draw(ctx, camX, camY));
-        entities.forEach(e => e.draw(ctx, camX, camY));
-        projectiles.forEach(p => p.draw(ctx, camX, camY));
-        player.draw(ctx, camX, camY);
-        particles.forEach(p => p.draw(ctx, camX, camY));
+            const total = sqFt * baseRate * multiplier;
+            setEstimate(total);
+          };
 
-        if (keys.c) {
-            ctx.fillStyle = 'rgba(0,0,0,0.5)';
-            ctx.fillRect(0, 0, canvas.width, canvas.height);
-            
-            ctx.fillStyle = '#333';
-            ctx.strokeStyle = '#fff';
-            ctx.lineWidth = 4;
-            ctx.fillRect(player.x - camX - 60, player.y - camY - 80, 140, 60);
-            ctx.strokeRect(player.x - camX - 60, player.y - camY - 80, 140, 60);
-            
-            ctx.fillStyle = '#fff';
-            ctx.font = '10px Courier';
-            ctx.fillText("BUILD MODE", player.x - camX - 50, player.y - camY - 65);
-            ctx.fillText("Press -> to Build", player.x - camX - 55, player.y - camY - 50);
-            ctx.fillText("PLANK (20 Wood)", player.x - camX - 55, player.y - camY - 35);
-        }
-    }
+          useEffect(() => {
+            calculateEstimate();
+          }, [projectType, sqFt, quality]);
 
-    requestAnimationFrame(gameLoop);
-}
+          const formatCurrency = (val) => {
+            return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumSignificantDigits: 3 }).format(val);
+          };
 
-/* ---------------------------------------------------
-   INPUT HANDLING (KEYBOARD & TOUCH)
-   ---------------------------------------------------
-*/
+          return (
+            <div className="bg-stone-900 text-stone-50 p-8 md:p-12 border border-stone-800 shadow-2xl relative overflow-hidden">
+              <Calculator className="absolute -right-10 -bottom-10 text-stone-800 w-64 h-64 opacity-20 transform rotate-12" />
+              
+              <h3 className="text-2xl font-bold mb-8 uppercase tracking-widest flex items-center gap-3">
+                <span className="w-8 h-1 bg-stone-50 block"></span>
+                Project Estimator
+              </h3>
 
-function startGame() {
-    initAudio();
-    startScreen.style.display = 'none';
-    gameActive = true;
-    setupLevel();
-    requestAnimationFrame(gameLoop);
-}
+              <div className="grid md:grid-cols-2 gap-12 relative z-10">
+                <div className="space-y-8">
+                  <div className="space-y-3">
+                    <label className="text-xs font-bold uppercase tracking-widest text-stone-400">Type of Project</label>
+                    <div className="grid grid-cols-2 gap-2">
+                      {[
+                        { id: 'newBuild', label: 'New Home' },
+                        { id: 'remodelFull', label: 'Full Reno' },
+                        { id: 'remodelKitchen', label: 'Kitchen' },
+                        { id: 'remodelBath', label: 'Bathroom' }
+                      ].map((type) => (
+                        <button
+                          key={type.id}
+                          onClick={() => setProjectType(type.id)}
+                          className={`py-3 px-4 text-sm font-medium border transition-all duration-300 ${
+                            projectType === type.id 
+                              ? 'bg-stone-50 text-stone-900 border-stone-50' 
+                              : 'bg-transparent text-stone-500 border-stone-700 hover:border-stone-500'
+                          }`}
+                        >
+                          {type.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
 
-window.addEventListener('keydown', (e) => {
-    if (e.key === 'ArrowLeft') keys.ArrowLeft = true;
-    if (e.key === 'ArrowRight') keys.ArrowRight = true;
-    if (e.key === 'ArrowUp') keys.ArrowUp = true;
-    if (e.key === 'ArrowDown') keys.ArrowDown = true;
-    if (e.key.toLowerCase() === 'z') keys.z = true;
-    if (e.key.toLowerCase() === 'x') keys.x = true;
-    if (e.key.toLowerCase() === 'c') keys.c = true;
-});
+                  <div className="space-y-3">
+                    <div className="flex justify-between">
+                      <label className="text-xs font-bold uppercase tracking-widest text-stone-400">Area Size</label>
+                      <span className="text-sm font-mono text-stone-300">{sqFt.toLocaleString()} sq ft</span>
+                    </div>
+                    <input 
+                      type="range" 
+                      min={projectType.includes('remodel') ? 50 : 1000} 
+                      max={5000} 
+                      step={50}
+                      value={sqFt}
+                      onChange={(e) => setSqFt(parseInt(e.target.value))}
+                      className="w-full h-1 bg-stone-700 rounded-lg appearance-none cursor-pointer accent-stone-50"
+                    />
+                  </div>
 
-window.addEventListener('keyup', (e) => {
-    if (e.key === 'ArrowLeft') keys.ArrowLeft = false;
-    if (e.key === 'ArrowRight') keys.ArrowRight = false;
-    if (e.key === 'ArrowUp') keys.ArrowUp = false;
-    if (e.key === 'ArrowDown') keys.ArrowDown = false;
-    if (e.key.toLowerCase() === 'z') keys.z = false;
-    if (e.key.toLowerCase() === 'x') keys.x = false;
-    if (e.key.toLowerCase() === 'c') keys.c = false;
-});
+                  <div className="space-y-3">
+                    <label className="text-xs font-bold uppercase tracking-widest text-stone-400">Finish Level</label>
+                    <div className="flex gap-4">
+                      {['standard', 'premium', 'luxury'].map((lvl) => (
+                        <button
+                          key={lvl}
+                          onClick={() => setQuality(lvl)}
+                          className={`flex-1 py-2 text-xs uppercase tracking-widest border-b-2 transition-colors ${
+                            quality === lvl 
+                              ? 'border-stone-50 text-stone-50' 
+                              : 'border-stone-800 text-stone-600 hover:text-stone-400'
+                          }`}
+                        >
+                          {lvl}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                </div>
 
-// Touch Handler
-function bindTouch(id, key) {
-    const btn = document.getElementById(id);
-    btn.addEventListener('touchstart', (e) => { 
-        e.preventDefault(); 
-        keys[key] = true; 
-    });
-    btn.addEventListener('touchend', (e) => { 
-        e.preventDefault(); 
-        keys[key] = false; 
-    });
-}
+                <div className="flex flex-col justify-center items-center bg-stone-950/50 border border-stone-800 p-8 text-center space-y-2">
+                  <span className="text-stone-500 text-xs font-mono uppercase tracking-widest">Estimated Investment Range</span>
+                  <div className="text-4xl md:text-5xl font-black tracking-tighter text-stone-50">
+                    {formatCurrency(estimate)}
+                    <span className="text-stone-600 ml-1 text-2xl">+</span>
+                  </div>
+                  <p className="text-stone-600 text-xs max-w-xs mt-4 leading-relaxed">
+                    *This is a preliminary estimate for planning purposes only. Final costs depend on site conditions.
+                  </p>
+                  <a href="#contact" className="mt-6 inline-flex items-center gap-2 text-sm font-bold uppercase tracking-widest hover:text-stone-300 transition-colors">
+                    Get Precise Quote <ArrowRight size={14} />
+                  </a>
+                </div>
+              </div>
+            </div>
+          );
+        };
 
-bindTouch('btn-left', 'ArrowLeft');
-bindTouch('btn-right', 'ArrowRight');
-bindTouch('btn-jump', 'z');
-bindTouch('btn-attack', 'x');
-bindTouch('btn-build', 'c');
+        const JoseyBuilders = () => {
+          const [isMenuOpen, setIsMenuOpen] = useState(false);
+          const [scrolled, setScrolled] = useState(false);
 
-</script>
+          useEffect(() => {
+            const handleScroll = () => setScrolled(window.scrollY > 50);
+            window.addEventListener('scroll', handleScroll);
+            return () => window.removeEventListener('scroll', handleScroll);
+          }, []);
+
+          const navLinks = [
+            { name: 'Services', href: '#services' },
+            { name: 'About', href: '#about' },
+            { name: 'Estimator', href: '#estimator' },
+            { name: 'Contact', href: '#contact' },
+          ];
+
+          return (
+            <div className="min-h-screen bg-stone-50 text-stone-900 font-sans selection:bg-stone-900 selection:text-white overflow-x-hidden">
+              
+              <div className="fixed inset-0 pointer-events-none flex items-center justify-center z-0 overflow-hidden opacity-[0.03]">
+                 <LogoSVG className="w-[150vw] md:w-[90vw] text-black transform -rotate-12" />
+              </div>
+
+              <nav className={`fixed w-full z-50 transition-all duration-300 ${scrolled ? 'bg-stone-50/95 backdrop-blur-md py-6 shadow-sm' : 'bg-transparent py-10'}`}>
+                <div className="max-w-7xl mx-auto px-6 flex justify-between items-center">
+                  <div className="flex items-center z-50">
+                     <a href="#" className="block pl-1">
+                       <LogoSVG className="h-14 w-auto transition-transform hover:scale-105" color="#1c1917" />
+                     </a>
+                  </div>
+                  
+                  <div className="hidden md:flex gap-12 text-sm font-medium tracking-widest uppercase items-center">
+                    {navLinks.map(link => (
+                      <a key={link.name} href={link.href} className="hover:text-stone-500 transition-colors relative group">
+                        {link.name}
+                        <span className="absolute -bottom-2 left-0 w-0 h-0.5 bg-stone-900 transition-all group-hover:w-full"></span>
+                      </a>
+                    ))}
+                  </div>
+
+                  <button className="md:hidden z-50 text-stone-900" onClick={() => setIsMenuOpen(!isMenuOpen)}>
+                    {isMenuOpen ? <X size={28} /> : <Menu size={28} />}
+                  </button>
+                </div>
+
+                <div className={`fixed inset-0 bg-stone-50 z-40 flex flex-col items-center justify-center gap-8 text-2xl font-light transition-transform duration-500 md:hidden ${isMenuOpen ? 'translate-x-0' : 'translate-x-full'}`}>
+                  <div className="absolute top-8 left-6 opacity-20">
+                     <LogoSVG className="h-12 w-auto" />
+                  </div>
+                  {navLinks.map(link => (
+                    <a key={link.name} href={link.href} onClick={() => setIsMenuOpen(false)} className="hover:text-stone-500 tracking-widest uppercase">
+                      {link.name}
+                    </a>
+                  ))}
+                </div>
+              </nav>
+
+              <header className="relative min-h-screen flex flex-col justify-center px-6 md:px-24 pt-32">
+                <div className="max-w-4xl relative z-10">
+                  <FadeIn delay={100}>
+                    <p className="text-stone-500 font-mono text-sm md:text-base mb-6 tracking-widest uppercase border-l-2 border-stone-900 pl-4">
+                      Est. 1998 • Sumter, South Carolina
+                    </p>
+                  </FadeIn>
+                  
+                  <FadeIn delay={300}>
+                    <h1 className="text-5xl md:text-8xl font-black tracking-tighter leading-[0.9] mb-8 text-stone-900">
+                      BUILDING<br/>
+                      LEGACIES<br/>
+                      <span className="text-stone-400">NOT JUST HOMES.</span>
+                    </h1>
+                  </FadeIn>
+
+                  <FadeIn delay={500}>
+                    <p className="text-lg md:text-xl text-stone-600 max-w-xl leading-relaxed mb-12">
+                      Over 25 years of licensed expertise in the Midlands. 
+                      Family owned, precision driven, and dedicated to the craft of construction.
+                    </p>
+                  </FadeIn>
+
+                  <FadeIn delay={700}>
+                    <div className="flex flex-col sm:flex-row gap-4">
+                      <a href="#contact" className="px-8 py-4 bg-stone-900 text-white font-bold tracking-widest uppercase hover:bg-stone-800 transition-colors flex items-center justify-center gap-2">
+                        Start Project <ArrowRight size={18} />
+                      </a>
+                      <a href="tel:8039832862" className="px-8 py-4 border-2 border-stone-200 hover:border-stone-900 text-stone-900 font-bold tracking-widest uppercase transition-colors flex items-center justify-center">
+                        803-983-2862
+                      </a>
+                    </div>
+                  </FadeIn>
+                </div>
+              </header>
+
+              <div className="border-y border-stone-200 bg-white relative z-10">
+                <div className="max-w-7xl mx-auto px-6 grid grid-cols-1 md:grid-cols-3 divide-y md:divide-y-0 md:divide-x divide-stone-200">
+                  {[
+                    { label: 'Experience', value: '25+ Years' },
+                    { label: 'Location', value: 'Midlands, SC' },
+                    { label: 'Status', value: 'Licensed & Bonded' }
+                  ].map((stat, i) => (
+                    <div key={i} className="py-8 md:py-12 flex flex-col items-center justify-center text-center">
+                      <span className="text-3xl font-black mb-1">{stat.value}</span>
+                      <span className="text-xs font-mono uppercase text-stone-500 tracking-widest">{stat.label}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <Section id="services" className="bg-stone-100/50">
+                <div className="max-w-7xl mx-auto">
+                  <FadeIn>
+                    <div className="flex flex-col items-start mb-16">
+                      <h2 className="text-4xl md:text-5xl font-black tracking-tight mb-4">OUR CRAFT</h2>
+                      <div className="h-1 w-24 bg-stone-900 mb-6"></div>
+                      <p className="text-stone-600 max-w-2xl text-sm md:text-base leading-relaxed">
+                        We specialize in transforming visions into tangible structures. From the first pour of concrete to the final coat of paint, our standards never waver.
+                      </p>
+                    </div>
+                  </FadeIn>
+
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+                    {[
+                      {
+                        icon: <HardHat size={40} />,
+                        title: "New Construction",
+                        desc: "Custom homes built from the ground up with precision engineering and timeless design."
+                      },
+                      {
+                        icon: <Hammer size={40} />,
+                        title: "Remodeling",
+                        desc: "Breathing new life into existing spaces. Kitchens, baths, and full home renovations."
+                      },
+                      {
+                        icon: <Ruler size={40} />,
+                        title: "General Contracting",
+                        desc: "Full-service project management handling every detail, permit, and subcontractor."
+                      }
+                    ].map((service, idx) => (
+                      <FadeIn key={idx} delay={idx * 200}>
+                        <div className="bg-white p-10 h-full border border-stone-200 hover:border-stone-900 transition-colors group">
+                          <div className="mb-8 text-stone-300 group-hover:text-stone-900 transition-colors duration-500">
+                            {service.icon}
+                          </div>
+                          <h3 className="text-xl font-bold uppercase tracking-wide mb-4">{service.title}</h3>
+                          <p className="text-stone-600 leading-relaxed text-sm">{service.desc}</p>
+                        </div>
+                      </FadeIn>
+                    ))}
+                  </div>
+                </div>
+              </Section>
+
+              <Section id="about" className="bg-stone-900 text-stone-50">
+                <div className="max-w-4xl mx-auto text-center">
+                  <FadeIn>
+                    <div className="inline-block border border-stone-700 px-4 py-1 rounded-full mb-8">
+                      <span className="text-xs font-mono uppercase tracking-widest text-stone-400">Family Owned & Operated</span>
+                    </div>
+                    
+                    <h2 className="text-3xl md:text-5xl font-light leading-tight mb-12">
+                      "We don't just build houses. We build the backdrop for your family's memories."
+                    </h2>
+                    
+                    <div className="grid md:grid-cols-2 gap-12 text-left text-stone-400 text-sm md:text-base leading-relaxed">
+                      <p>
+                        Founded on the principles of integrity and hard work, Josey Builders has served Sumter and the Midlands for over two and a half decades. As a family-owned business, we understand that a home is more than wood and drywall—it's personal.
+                      </p>
+                      <p>
+                        Our "no-nonsense" approach means clear communication, transparent pricing, and a job site that is kept clean and safe. Being licensed and bonded isn't just a requirement for us; it's a promise of safety and quality to you.
+                      </p>
+                    </div>
+
+                    <div className="mt-16 flex flex-wrap justify-center gap-8 opacity-50">
+                       {['Licensed', 'Bonded', 'Insured', '25+ Years'].map((item) => (
+                         <div key={item} className="flex items-center gap-2">
+                           <CheckCircle2 size={16} />
+                           <span className="uppercase tracking-widest text-xs font-bold">{item}</span>
+                         </div>
+                       ))}
+                    </div>
+                  </FadeIn>
+                </div>
+              </Section>
+
+              <Section id="estimator">
+                <div className="max-w-4xl mx-auto">
+                  <FadeIn>
+                    <ConstructionCalculator />
+                  </FadeIn>
+                </div>
+              </Section>
+
+              <Section id="contact">
+                <div className="max-w-6xl mx-auto">
+                  <div className="grid md:grid-cols-2 gap-16">
+                    <FadeIn>
+                      <div className="flex flex-col h-full justify-between">
+                        <div>
+                          <h2 className="text-6xl md:text-8xl font-black text-stone-200 mb-8 -ml-1">CONTACT</h2>
+                          <h3 className="text-3xl font-bold mb-6">Ready to build?</h3>
+                          <p className="text-stone-600 mb-12 max-w-sm">
+                            Whether it's a new build or a complex remodel, let's discuss how we can bring your project to life.
+                          </p>
+
+                          <div className="space-y-6 mb-12">
+                            <a href="tel:8039832862" className="flex items-center gap-4 text-xl font-medium hover:text-stone-600 transition-colors">
+                              <div className="w-12 h-12 bg-stone-100 flex items-center justify-center">
+                                <Phone size={20} />
+                              </div>
+                              803-983-2862
+                            </a>
+                            
+                            <a href="mailto:Josey.builders@yahoo.com" className="flex items-center gap-4 text-xl font-medium hover:text-stone-600 transition-colors">
+                              <div className="w-12 h-12 bg-stone-100 flex items-center justify-center">
+                                <Mail size={20} />
+                              </div>
+                              Josey.builders@yahoo.com
+                            </a>
+
+                            <div className="flex items-center gap-4 text-xl font-medium">
+                              <div className="w-12 h-12 bg-stone-100 flex items-center justify-center">
+                                <MapPin size={20} />
+                              </div>
+                              Sumter, SC
+                            </div>
+                          </div>
+                        </div>
+
+                        <div className="w-full h-64 bg-stone-100 grayscale opacity-80 hover:opacity-100 transition-opacity border border-stone-200">
+                          <iframe 
+                            width="100%" 
+                            height="100%" 
+                            frameBorder="0" 
+                            scrolling="no" 
+                            marginHeight="0" 
+                            marginWidth="0" 
+                            src="https://maps.google.com/maps?width=100%25&amp;height=600&amp;hl=en&amp;q=Sumter,%20SC+(Josey%20Builders)&amp;t=&amp;z=12&amp;ie=UTF8&amp;iwloc=B&amp;output=embed">
+                          </iframe>
+                        </div>
+                      </div>
+                    </FadeIn>
+
+                    <FadeIn delay={200}>
+                      <form className="bg-white p-8 md:p-12 shadow-2xl shadow-stone-200/50 border border-stone-100">
+                        <div className="space-y-6">
+                          <div className="grid grid-cols-2 gap-6">
+                            <div className="space-y-2">
+                              <label className="text-xs font-bold uppercase tracking-widest text-stone-500">First Name</label>
+                              <input type="text" className="w-full border-b-2 border-stone-200 py-2 focus:border-stone-900 outline-none transition-colors bg-transparent" />
+                            </div>
+                            <div className="space-y-2">
+                              <label className="text-xs font-bold uppercase tracking-widest text-stone-500">Last Name</label>
+                              <input type="text" className="w-full border-b-2 border-stone-200 py-2 focus:border-stone-900 outline-none transition-colors bg-transparent" />
+                            </div>
+                          </div>
+                          
+                          <div className="space-y-2">
+                            <label className="text-xs font-bold uppercase tracking-widest text-stone-500">Email Address</label>
+                            <input type="email" className="w-full border-b-2 border-stone-200 py-2 focus:border-stone-900 outline-none transition-colors bg-transparent" />
+                          </div>
+
+                          <div className="space-y-2">
+                            <label className="text-xs font-bold uppercase tracking-widest text-stone-500">Project Type</label>
+                            <select className="w-full border-b-2 border-stone-200 py-2 focus:border-stone-900 outline-none transition-colors bg-transparent">
+                              <option>New Construction</option>
+                              <option>Remodeling</option>
+                              <option>General Inquiry</option>
+                            </select>
+                          </div>
+
+                          <div className="space-y-2">
+                            <label className="text-xs font-bold uppercase tracking-widest text-stone-500">Message</label>
+                            <textarea rows="4" className="w-full border-b-2 border-stone-200 py-2 focus:border-stone-900 outline-none transition-colors bg-transparent resize-none"></textarea>
+                          </div>
+
+                          <button className="w-full bg-stone-900 text-white font-bold tracking-widest uppercase py-4 hover:bg-stone-800 transition-colors mt-4">
+                            Send Request
+                          </button>
+                        </div>
+                      </form>
+                    </FadeIn>
+                  </div>
+                </div>
+              </Section>
+
+              <footer className="bg-stone-50 border-t border-stone-200 py-12">
+                <div className="max-w-7xl mx-auto px-6 flex flex-col md:flex-row justify-between items-center gap-6">
+                  <div className="flex items-center gap-2 opacity-50 grayscale hover:grayscale-0 transition-all">
+                     <LogoSVG className="h-10 w-auto" color="#1c1917" />
+                  </div>
+                  <p className="text-stone-400 text-xs font-mono uppercase tracking-widest">
+                    © {new Date().getFullYear()} Josey Builders. All Rights Reserved.
+                  </p>
+                </div>
+              </footer>
+            </div>
+          );
+        };
+
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<JoseyBuilders />);
+    </script>
 </body>
 </html>
+
+
